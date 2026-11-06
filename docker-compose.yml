@@ -1,0 +1,73 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: delmont-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      API_INTERNAL_URL: http://backend:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - delmont-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: delmont-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      APP_NAME: ${APP_NAME:-Delmont Business}
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-delmont}:${POSTGRES_PASSWORD:-delmont}@postgres:5432/${POSTGRES_DB:-delmont}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - delmont-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: delmont-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-delmont}
+      POSTGRES_USER: ${POSTGRES_USER:-delmont}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-delmont}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-delmont} -d ${POSTGRES_DB:-delmont}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - delmont-network
+
+networks:
+  delmont-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
