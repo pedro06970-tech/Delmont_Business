@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import Cookie, Depends, Header
@@ -10,6 +11,7 @@ from app.core.errors import AppError
 from app.core.security import hash_token
 from app.db.session import get_db
 from app.models.auth import AuthSession
+from app.models.store import Store, UserStore
 from app.models.user import User, UserRole
 
 
@@ -61,3 +63,19 @@ def require_admin_csrf(user: User = Depends(require_csrf)) -> User:
     if user.role != UserRole.ADMIN:
         raise AppError(403, "admin_required", "Acesso restrito a administradores.")
     return user
+
+
+def get_operational_store(
+    db: Session, user: User, store_id: uuid.UUID
+) -> Store:
+    query = select(Store).where(Store.id == store_id)
+    if user.role == UserRole.COLLABORATOR:
+        query = query.join(UserStore, UserStore.store_id == Store.id).where(
+            UserStore.user_id == user.id
+        )
+    store = db.scalar(query)
+    if not store:
+        raise AppError(404, "store_not_found", "Loja não encontrada ou não autorizada.")
+    if not store.is_active:
+        raise AppError(409, "inactive_store", "Esta loja está inativa.")
+    return store

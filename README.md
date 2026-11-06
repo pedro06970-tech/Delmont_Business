@@ -126,6 +126,21 @@ Endpoints disponíveis:
 - `GET /stores`, `GET /stores/{id}`, `POST /stores`, `PATCH /stores/{id}`
 - `GET /users/{id}/stores`, `PUT /users/{id}/stores`
 
+### Módulo comercial
+
+Clientes são sempre vinculados a uma loja e o telefone é normalizado para E.164. O cadastro não concede autorização para lembretes: o consentimento precisa ser registrado explicitamente, com sua origem, e todas as concessões e revogações permanecem no histórico.
+
+- `GET /customers`, `POST /customers`
+- `GET /customers/{id}`, `PATCH /customers/{id}`
+- `POST /customers/{id}/consent`, `POST /customers/{id}/revoke-consent`
+- `GET /message-templates`, `POST /message-templates`
+- `GET /message-templates/{id}`, `PATCH /message-templates/{id}`
+- `POST /message-templates/{id}/preview`
+
+As consultas de clientes e modelos recebem `store_id` e o backend valida a autorização do usuário antes de consultar os dados. Modelos aceitam somente `{{nome}}`, `{{produto}}` e `{{loja}}`; modelos inativos não geram prévias operacionais.
+
+A interface comercial fica em http://localhost:3000/app/commercial e acompanha a loja ativa selecionada no cabeçalho.
+
 ## Testes e verificações
 
 Backend:
@@ -161,4 +176,4 @@ docker compose exec backend alembic upgrade head
 
 ## Escopo atual
 
-Autenticação, usuários, lojas e associações estão implementados. Ainda não estão implementados: cadastro de clientes, WhatsMiau, agendamento, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.
+Autenticação, usuários, lojas, clientes, consentimentos e modelos de mensagens estão implementados. Ainda não estão implementados: WhatsMiau, agendamento, disparos, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.

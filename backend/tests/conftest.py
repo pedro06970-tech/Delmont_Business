@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal, engine
 from app.main import app
+from app.models.store import Store, UserStore
 from app.models.user import User, UserRole
 
 
@@ -28,7 +29,8 @@ def clean_database(migrated_test_database) -> Generator[None, None, None]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE login_attempts, auth_sessions, user_stores, stores, users "
+                "TRUNCATE customer_consent_events, message_templates, customers, "
+                "login_attempts, auth_sessions, user_stores, stores, users "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -70,6 +72,23 @@ def user_factory(db: Session):
         return user
 
     return create_user
+
+
+@pytest.fixture
+def store_factory(db: Session):
+    def create_store(
+        *, name: str = "Loja Teste", is_active: bool = True, users: list[User] | None = None
+    ) -> Store:
+        store = Store(name=name, is_active=is_active)
+        db.add(store)
+        db.flush()
+        for user in users or []:
+            db.add(UserStore(user_id=user.id, store_id=store.id))
+        db.commit()
+        db.refresh(store)
+        return store
+
+    return create_store
 
 
 @pytest.fixture

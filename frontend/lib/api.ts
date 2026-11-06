@@ -20,6 +20,51 @@ export type Store = {
   updated_at: string;
 };
 
+export type ConsentEvent = {
+  id: string;
+  action: "granted" | "revoked";
+  source: string | null;
+  performed_by_user_id: string;
+  occurred_at: string;
+};
+
+export type Customer = {
+  id: string;
+  store_id: string;
+  name: string;
+  phone_e164: string;
+  notes: string | null;
+  is_active: boolean;
+  has_consent: boolean;
+  consented_at: string | null;
+  consent_source: string | null;
+  consent_revoked_at: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerDetail = Customer & { consent_history: ConsentEvent[] };
+
+export type CustomerPage = {
+  items: Customer[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+};
+
+export type MessageTemplate = {
+  id: string;
+  store_id: string;
+  name: string;
+  content: string;
+  is_active: boolean;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 function csrfToken(): string | undefined {
   if (typeof document === "undefined") return undefined;
   const entry = document.cookie

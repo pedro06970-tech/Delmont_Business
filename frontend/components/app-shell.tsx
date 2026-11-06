@@ -2,9 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import { apiFetch, Store, User } from "@/lib/api";
+
+type ActiveStoreContextValue = {
+  activeStore: string;
+  stores: Store[];
+};
+
+const ActiveStoreContext = createContext<ActiveStoreContextValue | null>(null);
+
+export function useActiveStore() {
+  const context = useContext(ActiveStoreContext);
+  if (!context) throw new Error("useActiveStore must be used inside AppShell");
+  return context;
+}
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -60,6 +73,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const links = [
     { href: "/app", label: "Início" },
+    { href: "/app/commercial", label: "Comercial" },
     { href: "/app/account", label: "Minha conta" },
     ...(user.role === "admin" ? [{ href: "/app/admin", label: "Administração" }] : []),
   ];
@@ -91,19 +105,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="lg:pl-64">
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-4">
             <div className="lg:hidden">
               <p className="font-semibold text-emerald-700 dark:text-emerald-400">Delmont</p>
-              <nav className="mt-1 flex gap-3 text-xs">
+              <nav className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 {links.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}
               </nav>
             </div>
-            <label className="ml-auto flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <label className="order-3 flex w-full items-center gap-2 text-sm text-slate-600 sm:order-none sm:ml-auto sm:w-auto dark:text-slate-300">
               <span className="hidden sm:inline">Loja ativa</span>
               <select
                 value={activeStore}
                 onChange={(event) => selectStore(event.target.value)}
-                className="max-w-48 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 sm:max-w-48 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               >
                 <option value="">Nenhuma loja disponível</option>
                 {stores.filter((store) => store.is_active).map((store) => (
@@ -115,7 +129,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           {error && <p className="mx-auto mt-2 max-w-6xl text-xs text-rose-600">{error}</p>}
         </header>
-        <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+          <ActiveStoreContext.Provider value={{ activeStore, stores }}>
+            {children}
+          </ActiveStoreContext.Provider>
+        </main>
       </div>
     </div>
   );
