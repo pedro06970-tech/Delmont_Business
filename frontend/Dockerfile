@@ -15,7 +15,7 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-RUN npm run build
+RUN npm run lint && npm run build
 
 FROM node:22-alpine AS runner
 

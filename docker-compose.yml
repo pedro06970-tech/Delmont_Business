@@ -34,6 +34,10 @@ services:
       APP_NAME: ${APP_NAME:-Delmont Business}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-delmont}:${POSTGRES_PASSWORD:-delmont}@postgres:5432/${POSTGRES_DB:-delmont}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_WINDOW_MINUTES: ${LOGIN_WINDOW_MINUTES:-15}
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +68,45 @@ services:
       retries: 5
     networks:
       - delmont-network
+
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: delmont_test
+      POSTGRES_USER: delmont_test
+      POSTGRES_PASSWORD: delmont_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U delmont_test -d delmont_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - delmont-network
+    profiles: ["test"]
+
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://delmont_test:delmont_test@postgres-test:5432/delmont_test
+      FRONTEND_ORIGIN: http://localhost:3000
+      PYTHONPATH: /app
+      SESSION_TTL_MINUTES: 60
+      LOGIN_MAX_ATTEMPTS: 5
+      LOGIN_WINDOW_MINUTES: 15
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app:ro
+    command: pytest -q -p no:cacheprovider
+    networks:
+      - delmont-network
+    profiles: ["test"]
 
 networks:
   delmont-network:

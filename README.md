@@ -93,7 +93,38 @@ alembic upgrade head
 alembic current
 ```
 
-Uma baseline vazia inicializa o histórico de migrations sem criar tabelas de negócio nesta task.
+A baseline inicializa o histórico e a migration seguinte cria as tabelas de autenticação, usuários, lojas e associações.
+
+## Primeiro administrador
+
+O administrador inicial nunca é criado automaticamente. Com os containers em execução, forneça os dados explicitamente e execute o comando administrativo:
+
+```powershell
+$env:ADMIN_NAME="Nome do administrador"
+$env:ADMIN_EMAIL="admin@example.com"
+$env:ADMIN_PASSWORD="use-uma-senha-forte-com-12-ou-mais-caracteres"
+docker compose exec -e ADMIN_NAME -e ADMIN_EMAIL -e ADMIN_PASSWORD backend python -m app.cli.bootstrap_admin
+Remove-Item Env:ADMIN_NAME, Env:ADMIN_EMAIL, Env:ADMIN_PASSWORD
+```
+
+O comando é idempotente: se o administrador já existir, não altera sua senha nem cria duplicatas. A senha não é exibida em logs. Em um terminal interativo, também é possível omitir `ADMIN_PASSWORD` e informá-la pelo prompt seguro.
+
+## Autenticação e controle de acesso
+
+- Sessões opacas armazenadas no PostgreSQL e enviadas em cookie `HttpOnly`.
+- Cookie `Secure` habilitado automaticamente em `APP_ENVIRONMENT=production`.
+- Proteção CSRF para operações autenticadas de escrita.
+- Senhas armazenadas somente com Argon2id.
+- Bloqueio temporário após tentativas excessivas de login.
+- Perfis fixos `admin` e `collaborator`.
+- Acesso de colaboradores limitado às lojas ativas associadas.
+
+Endpoints disponíveis:
+
+- `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/change-password`
+- `GET /users`, `POST /users`, `PATCH /users/{id}`
+- `GET /stores`, `GET /stores/{id}`, `POST /stores`, `PATCH /stores/{id}`
+- `GET /users/{id}/stores`, `PUT /users/{id}/stores`
 
 ## Testes e verificações
 
@@ -102,6 +133,14 @@ Backend:
 ```powershell
 Set-Location backend
 python -m pytest -q
+```
+
+Os testes de autenticação exigem PostgreSQL real e isolado. Execute pelo perfil de teste do Compose:
+
+```powershell
+docker compose --profile test run --rm backend-test
+docker compose --profile test stop postgres-test
+docker compose --profile test rm -f postgres-test
 ```
 
 Frontend:
@@ -120,6 +159,6 @@ Invoke-RestMethod http://localhost:8000/health
 docker compose exec backend alembic upgrade head
 ```
 
-## Escopo desta task
+## Escopo atual
 
-Não estão implementados ainda: autenticação, cadastro de clientes, WhatsMiau, agendamento, regras financeiras e integração com o sistema de caixa. A interface atual é uma prévia estrutural responsiva, com suporte ao esquema de cores claro e escuro do sistema operacional.
+Autenticação, usuários, lojas e associações estão implementados. Ainda não estão implementados: cadastro de clientes, WhatsMiau, agendamento, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.

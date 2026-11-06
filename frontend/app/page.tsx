@@ -53,10 +53,10 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
               <a
-                href="#solucoes"
+                href="/login"
                 className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
               >
-                Explorar módulos
+                Entrar na plataforma
               </a>
               <a
                 href="#status"
