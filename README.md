@@ -136,10 +136,18 @@ Clientes são sempre vinculados a uma loja e o telefone é normalizado para E.16
 - `GET /message-templates`, `POST /message-templates`
 - `GET /message-templates/{id}`, `PATCH /message-templates/{id}`
 - `POST /message-templates/{id}/preview`
+- `GET /reminders`, `POST /reminders`
+- `GET /reminders/{id}`, `PATCH /reminders/{id}`
+- `POST /reminders/{id}/cancel`
+- `POST /reminders/cancel-product`
 
 As consultas de clientes e modelos recebem `store_id` e o backend valida a autorização do usuário antes de consultar os dados. Modelos aceitam somente `{{nome}}`, `{{produto}}` e `{{loja}}`; modelos inativos não geram prévias operacionais.
 
 A interface comercial fica em http://localhost:3000/app/commercial e acompanha a loja ativa selecionada no cabeçalho.
+
+Os lembretes armazenam a mensagem final renderizada, produto de interesse, data e horário e um dos estados `pending`, `cancelled`, `completed` ou `failed`. A criação exige cliente ativo com consentimento e modelo ativo na mesma loja. Um índice único parcial no PostgreSQL impede lembretes pendentes duplicados mesmo sob concorrência. A rota `cancel-product` é idempotente e encerra as pendências do produto quando a venda é concluída.
+
+Este módulo é um motor passivo nesta etapa: não há worker, scheduler ativo nem integração com WhatsMiau, portanto nenhum lembrete é disparado automaticamente.
 
 ## Testes e verificações
 
@@ -176,4 +184,4 @@ docker compose exec backend alembic upgrade head
 
 ## Escopo atual
 
-Autenticação, usuários, lojas, clientes, consentimentos e modelos de mensagens estão implementados. Ainda não estão implementados: WhatsMiau, agendamento, disparos, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.
+Autenticação, usuários, lojas, clientes, consentimentos, modelos de mensagens e o motor passivo de agendamento estão implementados. Ainda não estão implementados: WhatsMiau, worker de disparos, scheduler ativo, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.

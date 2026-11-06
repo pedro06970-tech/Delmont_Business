@@ -65,6 +65,34 @@ export type MessageTemplate = {
   updated_at: string;
 };
 
+export type ReminderStatus = "pending" | "cancelled" | "completed" | "failed";
+
+export type Reminder = {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  message_template_id: string;
+  product_interest: string;
+  scheduled_for: string;
+  rendered_message: string;
+  status: ReminderStatus;
+  created_by_user_id: string;
+  cancelled_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReminderPage = {
+  items: Reminder[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+};
+
 function csrfToken(): string | undefined {
   if (typeof document === "undefined") return undefined;
   const entry = document.cookie

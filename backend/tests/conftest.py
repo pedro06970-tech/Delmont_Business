@@ -29,7 +29,7 @@ def clean_database(migrated_test_database) -> Generator[None, None, None]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE customer_consent_events, message_templates, customers, "
+                "TRUNCATE reminders, customer_consent_events, message_templates, customers, "
                 "login_attempts, auth_sessions, user_stores, stores, users "
                 "RESTART IDENTITY CASCADE"
             )
