@@ -38,6 +38,13 @@ services:
       SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
       LOGIN_WINDOW_MINUTES: ${LOGIN_WINDOW_MINUTES:-15}
+      WHATSMIAU_BASE_URL: ${WHATSMIAU_BASE_URL:-https://api.whatsmiau.dev/v2}
+      WHATSMIAU_HTTP_TIMEOUT_SECONDS: ${WHATSMIAU_HTTP_TIMEOUT_SECONDS:-10}
+      REMINDER_DISPATCH_ENABLED: ${REMINDER_DISPATCH_ENABLED:-true}
+      REMINDER_HOMOLOGATION_ONLY: ${REMINDER_HOMOLOGATION_ONLY:-false}
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +54,36 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    networks:
+      - delmont-network
+
+  reminder-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: delmont-reminder-worker
+    command: python -m app.worker.reminders
+    restart: unless-stopped
+    environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-delmont}:${POSTGRES_PASSWORD:-delmont}@postgres:5432/${POSTGRES_DB:-delmont}
+      WHATSMIAU_BASE_URL: ${WHATSMIAU_BASE_URL:-https://api.whatsmiau.dev/v2}
+      WHATSMIAU_HTTP_TIMEOUT_SECONDS: ${WHATSMIAU_HTTP_TIMEOUT_SECONDS:-10}
+      REMINDER_DISPATCH_ENABLED: ${REMINDER_DISPATCH_ENABLED:-true}
+      REMINDER_HOMOLOGATION_ONLY: ${REMINDER_HOMOLOGATION_ONLY:-false}
+      REMINDER_WORKER_POLL_SECONDS: ${REMINDER_WORKER_POLL_SECONDS:-2}
+      REMINDER_WORKER_BATCH_SIZE: ${REMINDER_WORKER_BATCH_SIZE:-10}
+      REMINDER_CLAIM_TTL_SECONDS: ${REMINDER_CLAIM_TTL_SECONDS:-120}
+      REMINDER_MAX_ATTEMPTS: ${REMINDER_MAX_ATTEMPTS:-3}
+      REMINDER_RETRY_BASE_SECONDS: ${REMINDER_RETRY_BASE_SECONDS:-30}
+      REMINDER_INSTANCE_CONCURRENCY: ${REMINDER_INSTANCE_CONCURRENCY:-1}
+      REMINDER_MIN_INTERVAL_SECONDS: ${REMINDER_MIN_INTERVAL_SECONDS:-2}
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - delmont-network
 
@@ -98,6 +135,8 @@ services:
       SESSION_TTL_MINUTES: 60
       LOGIN_MAX_ATTEMPTS: 5
       LOGIN_WINDOW_MINUTES: 15
+      REMINDER_DISPATCH_ENABLED: "false"
+      REMINDER_HOMOLOGATION_ONLY: "false"
     depends_on:
       postgres-test:
         condition: service_healthy

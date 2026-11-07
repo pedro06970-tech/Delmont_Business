@@ -147,7 +147,42 @@ A interface comercial fica em http://localhost:3000/app/commercial e acompanha a
 
 Os lembretes armazenam a mensagem final renderizada, produto de interesse, data e horário e um dos estados `pending`, `cancelled`, `completed` ou `failed`. A criação exige cliente ativo com consentimento e modelo ativo na mesma loja. Um índice único parcial no PostgreSQL impede lembretes pendentes duplicados mesmo sob concorrência. A rota `cancel-product` é idempotente e encerra as pendências do produto quando a venda é concluída.
 
-Este módulo é um motor passivo nesta etapa: não há worker, scheduler ativo nem integração com WhatsMiau, portanto nenhum lembrete é disparado automaticamente.
+### WhatsMiau e execução automática
+
+O serviço `reminder-worker` consulta os lembretes vencidos continuamente, reivindica pequenos lotes com PostgreSQL `FOR UPDATE SKIP LOCKED` e usa leases persistentes. A transação é encerrada antes da chamada HTTP. Um lease expirado em `claimed` pode voltar à fila; um lease expirado em `sending` vira `uncertain` e nunca é reenviado automaticamente.
+
+O adaptador segue a [referência oficial da API v2 da WhatsMiau](https://whatsmiau.dev/docs/getting-started): base `https://api.whatsmiau.dev/v2`, header `apikey`, `GET /instance/connectionState/{instance}` e `POST /message/sendText/{instance}` com `number` e `text`. Como a documentação não oferece idempotência de envio nem consulta confiável por ID para reconciliar timeout, resultados ambíguos permanecem para análise manual.
+
+Cada loja referencia uma variável de ambiente própria. Por exemplo, adicione ao `.env`:
+
+```dotenv
+WHATS_MIAU_LOJA_CENTRO_KEY="chave-fornecida-pela-whatsmiau"
+```
+
+No painel administrativo, configure somente o nome `WHATS_MIAU_LOJA_CENTRO_KEY`; o valor não é armazenado no PostgreSQL, devolvido pela API ou enviado ao frontend. O arquivo `.env` é carregado apenas pelo backend e pelo worker.
+
+Endpoints administrativos:
+
+- `GET`, `PUT /whatsmiau/configurations/{store_id}`
+- `POST /whatsmiau/configurations/{store_id}/check`
+- `POST /whatsmiau/configurations/{store_id}/pause`
+- `POST /whatsmiau/configurations/{store_id}/resume`
+- `GET /whatsmiau/attempts`
+- `GET /whatsmiau/attempts/{attempt_id}`
+- `GET /whatsmiau/readiness/{store_id}`
+- `POST /whatsmiau/readiness/{store_id}/check`
+- `PUT /whatsmiau/configurations/{store_id}/homologation-number`
+- `POST /webhooks/whatsmiau/{store_id}`
+
+O webhook autenticado processa `messages.update` e mantém separados os estados aceito, entregue e lido. O modo `REMINDER_HOMOLOGATION_ONLY=true` restringe o worker ao número de teste autorizado da loja. O roteiro completo, sem credenciais reais, está em [docs/whatsmiau-homologation.md](docs/whatsmiau-homologation.md).
+
+Antes de iniciar uma versão nova do worker em produção, aplique as migrations:
+
+```powershell
+docker compose up -d postgres
+docker compose run --rm backend alembic upgrade head
+docker compose up --build -d
+```
 
 ## Testes e verificações
 
@@ -158,7 +193,7 @@ Set-Location backend
 python -m pytest -q
 ```
 
-Os testes de autenticação exigem PostgreSQL real e isolado. Execute pelo perfil de teste do Compose:
+Os testes de persistência e concorrência exigem PostgreSQL real e isolado. A WhatsMiau é substituída por um servidor HTTP local; os testes nunca enviam mensagens reais:
 
 ```powershell
 docker compose --profile test run --rm backend-test
@@ -184,4 +219,4 @@ docker compose exec backend alembic upgrade head
 
 ## Escopo atual
 
-Autenticação, usuários, lojas, clientes, consentimentos, modelos de mensagens e o motor passivo de agendamento estão implementados. Ainda não estão implementados: WhatsMiau, worker de disparos, scheduler ativo, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.
+Autenticação, usuários, lojas, clientes, consentimentos, modelos de mensagens, agendamento, integração WhatsMiau e worker de disparos estão implementados. A confirmação HTTP do provedor é apresentada como mensagem aceita, não como entrega ao destinatário. Ainda não estão implementados: campanhas em massa, caixa de entrada, regras financeiras e integração com o sistema de caixa. A interface é responsiva e acompanha o esquema de cores claro ou escuro do sistema operacional.

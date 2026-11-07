@@ -69,6 +69,15 @@ class ReminderResponse(BaseModel):
     completed_at: datetime | None
     failed_at: datetime | None
     failure_reason: str | None
+    execution_status: str
+    attempt_count: int
+    provider_message_id: str | None
+    provider_status: str | None
+    accepted_at: datetime | None
+    delivered_at: datetime | None
+    read_at: datetime | None
+    last_attempt_at: datetime | None
+    last_transport_error: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -117,7 +117,18 @@ class Reminder(Base):
             "status IN ('pending', 'cancelled', 'completed', 'failed')",
             name="ck_reminder_status",
         ),
+        CheckConstraint(
+            "execution_status IN ('pending', 'claimed', 'sending', 'sent', "
+            "'retry_wait', 'uncertain', 'failed')",
+            name="ck_reminder_execution_status",
+        ),
         Index("ix_reminders_store_status_schedule", "store_id", "status", "scheduled_for"),
+        Index(
+            "ix_reminders_execution_due",
+            "execution_status",
+            "next_attempt_at",
+            "scheduled_for",
+        ),
         Index(
             "uq_pending_reminder_identity",
             "store_id",
@@ -154,9 +165,97 @@ class Reminder(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     failure_reason: Mapped[str | None] = mapped_column(Text)
+    execution_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    provider_status: Mapped[str | None] = mapped_column(String(64))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_transport_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class WhatsMiauConfiguration(Base):
+    __tablename__ = "whatsmiau_configurations"
+    __table_args__ = (
+        UniqueConstraint("store_id", name="uq_whatsmiau_configuration_store"),
+        Index("ix_whatsmiau_configuration_enabled", "is_enabled", "dispatch_paused"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    store_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
+    )
+    instance_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    credential_env_var: Mapped[str] = mapped_column(String(128), nullable=False)
+    webhook_secret_env_var: Mapped[str | None] = mapped_column(String(128))
+    homologation_phone_e164: Mapped[str | None] = mapped_column(String(16))
+    homologation_authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    dispatch_paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    connection_state: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    last_connection_error: Mapped[str | None] = mapped_column(String(255))
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_dispatch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ReminderDeliveryAttempt(Base):
+    __tablename__ = "reminder_delivery_attempts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('started', 'accepted', 'retry_wait', 'uncertain', "
+            "'failed', 'skipped', 'disconnected')",
+            name="ck_reminder_delivery_attempt_status",
+        ),
+        UniqueConstraint("reminder_id", "attempt_number", name="uq_attempt_reminder_number"),
+        Index("ix_delivery_attempts_store_started", "store_id", "started_at"),
+        Index("ix_delivery_attempts_status", "status", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    reminder_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("reminders.id", ondelete="CASCADE"), nullable=False
+    )
+    store_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    configuration_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("whatsmiau_configurations.id", ondelete="SET NULL"),
+    )
+    attempt_number: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    provider_status: Mapped[str | None] = mapped_column(String(64))
+    error_category: Mapped[str | None] = mapped_column(String(32))
+    sanitized_error: Mapped[str | None] = mapped_column(String(500))
+    http_status: Mapped[int | None] = mapped_column()
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

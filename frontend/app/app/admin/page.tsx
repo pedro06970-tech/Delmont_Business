@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { apiFetch, Store, User, UserRole } from "@/lib/api";
+import WhatsMiauManager from "@/components/admin/whatsmiau-manager";
 
 type UserStores = { user_id: string; stores: Store[] };
 
@@ -227,6 +228,8 @@ export default function AdminPage() {
           <button onClick={saveAssociations} className="primary-button">Salvar acessos</button>
         </div>
       </section>
+
+      <WhatsMiauManager stores={stores} />
     </div>
   );
 }

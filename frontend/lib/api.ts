@@ -81,8 +81,66 @@ export type Reminder = {
   completed_at: string | null;
   failed_at: string | null;
   failure_reason: string | null;
+  execution_status: "pending" | "claimed" | "sending" | "sent" | "retry_wait" | "uncertain" | "failed";
+  attempt_count: number;
+  provider_message_id: string | null;
+  provider_status: string | null;
+  accepted_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  last_attempt_at: string | null;
+  last_transport_error: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type WhatsMiauConfiguration = {
+  id: string;
+  store_id: string;
+  instance_name: string;
+  is_enabled: boolean;
+  dispatch_paused: boolean;
+  connection_state: string;
+  last_connection_error: string | null;
+  last_checked_at: string | null;
+  last_dispatch_at: string | null;
+  credential_configured: boolean;
+  webhook_secret_configured: boolean;
+  homologation_ready: boolean;
+  homologation_phone_masked: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReminderDeliveryAttempt = {
+  id: string;
+  reminder_id: string;
+  store_id: string;
+  configuration_id: string | null;
+  attempt_number: number;
+  status: string;
+  provider_message_id: string | null;
+  provider_status: string | null;
+  error_category: string | null;
+  sanitized_error: string | null;
+  http_status: number | null;
+  started_at: string;
+  finished_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+};
+
+export type WhatsMiauReadiness = {
+  store_id: string;
+  configured: boolean;
+  enabled: boolean;
+  dispatch_paused: boolean;
+  connection_state: string;
+  last_checked_at: string | null;
+  credential_configured: boolean;
+  ready_to_schedule: boolean;
+  homologation_only: boolean;
+  homologation_ready: boolean;
 };
 
 export type ReminderPage = {

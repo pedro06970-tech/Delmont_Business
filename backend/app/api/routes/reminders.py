@@ -21,6 +21,8 @@ from app.schemas.reminder import (
     ReminderResponse,
     ReminderUpdate,
 )
+from app.schemas.whatsmiau import ReminderDeliveryAttemptResponse
+from app.models.commercial import ReminderDeliveryAttempt
 from app.services.reminders import (
     normalize_product,
     render_reminder_message,
@@ -141,6 +143,7 @@ def cancel_product_reminders(
             Reminder.customer_id == payload.customer_id,
             Reminder.product_key == normalize_product(payload.product_interest),
             Reminder.status == "pending",
+            Reminder.execution_status.in_(("pending", "claimed", "retry_wait")),
         )
         .values(status="cancelled", cancelled_at=datetime.now(UTC))
     )
@@ -157,6 +160,27 @@ def get_reminder(
     return get_reminder_for_user(db, user, reminder_id)
 
 
+@router.get(
+    "/{reminder_id}/attempts", response_model=list[ReminderDeliveryAttemptResponse]
+)
+def list_reminder_attempts(
+    reminder_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ReminderDeliveryAttempt]:
+    reminder = get_reminder_for_user(db, user, reminder_id)
+    return list(
+        db.scalars(
+            select(ReminderDeliveryAttempt)
+            .where(
+                ReminderDeliveryAttempt.reminder_id == reminder.id,
+                ReminderDeliveryAttempt.store_id == reminder.store_id,
+            )
+            .order_by(ReminderDeliveryAttempt.attempt_number.desc())
+        )
+    )
+
+
 @router.patch("/{reminder_id}", response_model=ReminderResponse)
 def update_reminder(
     reminder_id: uuid.UUID,
@@ -165,7 +189,10 @@ def update_reminder(
     db: Session = Depends(get_db),
 ) -> Reminder:
     reminder = get_reminder_for_user(db, user, reminder_id)
-    if reminder.status != "pending":
+    if reminder.status != "pending" or reminder.execution_status not in (
+        "pending",
+        "retry_wait",
+    ):
         raise AppError(409, "reminder_not_pending", "Somente lembretes pendentes podem ser editados.")
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
@@ -198,6 +225,12 @@ def cancel_reminder(
     reminder = get_reminder_for_user(db, user, reminder_id)
     if reminder.status == "cancelled":
         return reminder
+    if reminder.execution_status in ("sending", "uncertain"):
+        raise AppError(
+            409,
+            "reminder_in_flight",
+            "O envio já foi iniciado ou possui resultado incerto e não pode ser cancelado.",
+        )
     if reminder.status != "pending":
         raise AppError(409, "reminder_not_pending", "Este lembrete não pode ser cancelado.")
     reminder.status = "cancelled"
