@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user, get_operational_store, require_csrf
 from app.core.errors import AppError
 from app.db.session import get_db
-from app.models.commercial import Customer, MessageTemplate, Reminder
+from app.models.commercial import Customer, MessageTemplate, Reminder, SalesOpportunity
 from app.models.store import UserStore
 from app.models.user import User, UserRole
 from app.schemas.reminder import (
@@ -60,6 +60,38 @@ def commit_reminder(db: Session, reminder: Reminder) -> Reminder:
     return reminder
 
 
+def validate_opportunity_association(
+    db: Session,
+    *,
+    opportunity_id: uuid.UUID | None,
+    store_id: uuid.UUID,
+    customer_id: uuid.UUID,
+    product_interest: str,
+) -> SalesOpportunity | None:
+    if opportunity_id is None:
+        return None
+    opportunity = db.get(SalesOpportunity, opportunity_id)
+    if (
+        not opportunity
+        or opportunity.store_id != store_id
+        or opportunity.customer_id != customer_id
+    ):
+        raise AppError(
+            404,
+            "sales_opportunity_not_found",
+            "Oportunidade não encontrada para este cliente e loja.",
+        )
+    if opportunity.status != "open":
+        raise AppError(409, "opportunity_closed", "A oportunidade já está encerrada.")
+    if opportunity.product_key != normalize_product(product_interest):
+        raise AppError(
+            409,
+            "opportunity_product_mismatch",
+            "O produto do lembrete deve corresponder ao produto da oportunidade.",
+        )
+    return opportunity
+
+
 @router.get("", response_model=ReminderPage)
 def list_reminders(
     store_id: uuid.UUID,
@@ -106,9 +138,17 @@ def create_reminder(
         template=db.get(MessageTemplate, payload.message_template_id),
         store=store,
     )
+    opportunity = validate_opportunity_association(
+        db,
+        opportunity_id=payload.opportunity_id,
+        store_id=store.id,
+        customer_id=customer.id,
+        product_interest=payload.product_interest,
+    )
     reminder = Reminder(
         store_id=store.id,
         customer_id=customer.id,
+        opportunity_id=opportunity.id if opportunity else None,
         message_template_id=template.id,
         product_interest=payload.product_interest,
         product_key=normalize_product(payload.product_interest),
@@ -200,12 +240,21 @@ def update_reminder(
     store = get_operational_store(db, user, reminder.store_id)
     template_id = updates.get("message_template_id", reminder.message_template_id)
     product = updates.get("product_interest", reminder.product_interest)
+    opportunity_id = updates.get("opportunity_id", reminder.opportunity_id)
     customer, template = validate_reminder_sources(
         customer=db.get(Customer, reminder.customer_id),
         template=db.get(MessageTemplate, template_id),
         store=store,
     )
+    opportunity = validate_opportunity_association(
+        db,
+        opportunity_id=opportunity_id,
+        store_id=store.id,
+        customer_id=customer.id,
+        product_interest=product,
+    )
     reminder.message_template_id = template.id
+    reminder.opportunity_id = opportunity.id if opportunity else None
     reminder.product_interest = product
     reminder.product_key = normalize_product(product)
     if "scheduled_for" in updates:

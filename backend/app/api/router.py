@@ -9,6 +9,10 @@ from app.api.routes.stores import router as stores_router
 from app.api.routes.users import router as users_router
 from app.api.routes.whatsmiau import router as whatsmiau_router
 from app.api.routes.whatsmiau_webhooks import router as whatsmiau_webhooks_router
+from app.api.routes.sales_opportunities import (
+    dashboard_router as commercial_dashboard_router,
+    router as sales_opportunities_router,
+)
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -20,3 +24,5 @@ api_router.include_router(users_router)
 api_router.include_router(stores_router)
 api_router.include_router(whatsmiau_router)
 api_router.include_router(whatsmiau_webhooks_router)
+api_router.include_router(sales_opportunities_router)
+api_router.include_router(commercial_dashboard_router)

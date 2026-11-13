@@ -10,6 +10,8 @@ import {
   Reminder,
   ReminderDeliveryAttempt,
   ReminderPage,
+  SalesOpportunity,
+  SalesOpportunityPage,
   WhatsMiauReadiness,
 } from "@/lib/api";
 
@@ -49,6 +51,7 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([]);
   const [readiness, setReadiness] = useState<WhatsMiauReadiness | null>(null);
   const [attemptHistory, setAttemptHistory] = useState<Record<string, ReminderDeliveryAttempt[]>>({});
   const [selected, setSelected] = useState<Reminder | null>(null);
@@ -59,16 +62,18 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [reminderResult, customerResult, templateResult, readinessResult] = await Promise.all([
+    const [reminderResult, customerResult, templateResult, readinessResult, opportunityResult] = await Promise.all([
       apiFetch<ReminderPage>(`/reminders?store_id=${storeId}&page_size=100`),
       apiFetch<CustomerPage>(`/customers?store_id=${storeId}&page_size=100`),
       apiFetch<MessageTemplate[]>(`/message-templates?store_id=${storeId}`),
       apiFetch<WhatsMiauReadiness>(`/whatsmiau/readiness/${storeId}`),
+      apiFetch<SalesOpportunityPage>(`/sales-opportunities?store_id=${storeId}&status=open&page_size=100`),
     ]);
     setReminders(reminderResult.items);
     setCustomers(customerResult.items);
     setTemplates(templateResult);
     setReadiness(readinessResult);
+    setOpportunities(opportunityResult.items);
     setSelected((current) =>
       current ? reminderResult.items.find((item) => item.id === current.id) ?? null : null,
     );
@@ -80,12 +85,14 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
       apiFetch<CustomerPage>(`/customers?store_id=${storeId}&page_size=100`),
       apiFetch<MessageTemplate[]>(`/message-templates?store_id=${storeId}`),
       apiFetch<WhatsMiauReadiness>(`/whatsmiau/readiness/${storeId}`),
+      apiFetch<SalesOpportunityPage>(`/sales-opportunities?store_id=${storeId}&status=open&page_size=100`),
     ])
-      .then(([reminderResult, customerResult, templateResult, readinessResult]) => {
+      .then(([reminderResult, customerResult, templateResult, readinessResult, opportunityResult]) => {
         setReminders(reminderResult.items);
         setCustomers(customerResult.items);
         setTemplates(templateResult);
         setReadiness(readinessResult);
+        setOpportunities(opportunityResult.items);
       })
       .catch((requestError) =>
         setError(requestError instanceof Error ? requestError.message : "Falha ao carregar lembretes."),
@@ -109,11 +116,18 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const editing = selected?.status === "pending" && formOpen;
-    const common = {
+    const common: {
+      message_template_id: FormDataEntryValue | null;
+      product_interest: FormDataEntryValue | null;
+      scheduled_for: string;
+      opportunity_id?: string;
+    } = {
       message_template_id: data.get("message_template_id"),
       product_interest: data.get("product_interest"),
       scheduled_for: new Date(String(data.get("scheduled_for"))).toISOString(),
     };
+    const opportunityId = String(data.get("opportunity_id") ?? "");
+    if (opportunityId) common.opportunity_id = opportunityId;
     const body = editing
       ? common
       : { ...common, store_id: storeId, customer_id: data.get("customer_id") };
@@ -185,17 +199,24 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
   }
 
   async function completeSale(reminder: Reminder) {
-    if (!window.confirm("Confirmar a venda e cancelar os lembretes pendentes deste produto?")) return;
-    await runAction(
-      () => apiFetch("/reminders/cancel-product", {
-        method: "POST",
-        body: JSON.stringify({
-          store_id: storeId,
-          customer_id: reminder.customer_id,
-          product_interest: reminder.product_interest,
+    if (!reminder.opportunity_id) {
+      if (!window.confirm("Este é um lembrete legado sem oportunidade. Cancelar somente as pendências deste produto, sem registrar venda?")) return;
+      await runAction(
+        () => apiFetch("/reminders/cancel-product", {
+          method: "POST",
+          body: JSON.stringify({ store_id: storeId, customer_id: reminder.customer_id, product_interest: reminder.product_interest }),
         }),
+        "Pendências legadas deste produto canceladas; nenhum resultado comercial foi registrado.",
+      );
+      return;
+    }
+    if (!window.confirm("Confirmar a venda e cancelar os lembretes vinculados à oportunidade?")) return;
+    await runAction(
+      () => apiFetch(`/sales-opportunities/${reminder.opportunity_id}/close`, {
+        method: "POST",
+        body: JSON.stringify({ status: "won" }),
       }),
-      "Venda concluída; as pendências deste produto foram canceladas.",
+      "Venda concluída; as pendências vinculadas foram canceladas.",
     );
   }
 
@@ -221,7 +242,7 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
         <button onClick={() => { setSelected(null); setFormOpen(true); }} disabled={!eligibleCustomers.length || !activeTemplates.length} className="primary-button disabled:cursor-not-allowed disabled:opacity-50">+ Programar lembrete</button>
       </div>
 
-      {formOpen && <ReminderForm reminder={selected} customers={eligibleCustomers} templates={activeTemplates} busy={busy} onSubmit={save} onCancel={() => { setFormOpen(false); setSelected(null); }} />}
+      {formOpen && <ReminderForm reminder={selected} customers={eligibleCustomers} templates={activeTemplates} opportunities={opportunities.filter((item) => eligibleCustomers.some((customer) => customer.id === item.customer_id))} busy={busy} onSubmit={save} onCancel={() => { setFormOpen(false); setSelected(null); }} />}
 
       {!eligibleCustomers.length || !activeTemplates.length ? <p className="text-sm text-amber-700 dark:text-amber-300">Para programar, é necessário ter cliente ativo com consentimento e modelo de mensagem ativo.</p> : null}
 
@@ -239,7 +260,7 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
             <button onClick={() => toggleHistory(reminder.id)} className="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{attemptHistory[reminder.id] ? "Ocultar tentativas" : "Ver tentativas"}</button>
             {attemptHistory[reminder.id] && <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">{attemptHistory[reminder.id].map((attempt) => <div key={attempt.id} className="rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-950"><div className="flex justify-between gap-2"><span className="font-semibold">Tentativa {attempt.attempt_number}: {attempt.provider_status ?? attempt.status}</span><time className="text-slate-500">{new Date(attempt.started_at).toLocaleString("pt-BR")}</time></div>{attempt.delivered_at && <p className="mt-1 text-emerald-600">Entregue: {new Date(attempt.delivered_at).toLocaleString("pt-BR")}</p>}{attempt.read_at && <p className="mt-1 text-emerald-600">Lido: {new Date(attempt.read_at).toLocaleString("pt-BR")}</p>}{attempt.sanitized_error && <p className="mt-1 text-rose-600">{attempt.sanitized_error}</p>}</div>)}{!attemptHistory[reminder.id].length && <p className="text-xs text-slate-500">Nenhuma tentativa registrada.</p>}</div>}
             {reminder.failure_reason && <p className="mt-3 text-sm text-rose-600">{reminder.failure_reason}</p>}
-            {reminder.status === "pending" && !["sending", "uncertain", "sent"].includes(reminder.execution_status) && <div className="mt-4 flex flex-wrap gap-2">{["pending", "retry_wait"].includes(reminder.execution_status) && <button disabled={busy} onClick={() => { setSelected(reminder); setFormOpen(true); }} className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">Editar</button>}<button disabled={busy} onClick={() => cancel(reminder)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:text-rose-300">Cancelar</button><button disabled={busy} onClick={() => completeSale(reminder)} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Venda concluída</button></div>}
+            {reminder.status === "pending" && !["sending", "uncertain", "sent"].includes(reminder.execution_status) && <div className="mt-4 flex flex-wrap gap-2">{["pending", "retry_wait"].includes(reminder.execution_status) && <button disabled={busy} onClick={() => { setSelected(reminder); setFormOpen(true); }} className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">Editar</button>}<button disabled={busy} onClick={() => cancel(reminder)} className="rounded-xl border border-rose-200 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:text-rose-300">Cancelar</button><button disabled={busy} onClick={() => completeSale(reminder)} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">{reminder.opportunity_id ? "Venda concluída" : "Cancelar produto (legado)"}</button></div>}
           </article>
         ))}
       </div>
@@ -248,11 +269,12 @@ export default function ReminderManager({ storeId }: { storeId: string }) {
   );
 }
 
-function ReminderForm({ reminder, customers, templates, busy, onSubmit, onCancel }: { reminder: Reminder | null; customers: Customer[]; templates: MessageTemplate[]; busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function ReminderForm({ reminder, customers, templates, opportunities, busy, onSubmit, onCancel }: { reminder: Reminder | null; customers: Customer[]; templates: MessageTemplate[]; opportunities: SalesOpportunity[]; busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   return (
     <form onSubmit={onSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
       <h2 className="text-xl font-bold">{reminder ? "Editar lembrete" : "Novo lembrete"}</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="text-sm font-medium sm:col-span-2">Oportunidade comercial (opcional)<select name="opportunity_id" defaultValue={reminder?.opportunity_id ?? ""} onChange={(event) => { const opportunity = opportunities.find((item) => item.id === event.target.value); const form = event.currentTarget.form; if (!opportunity || !form) return; const customer = form.elements.namedItem("customer_id") as HTMLSelectElement | null; const product = form.elements.namedItem("product_interest") as HTMLInputElement | null; if (customer) customer.value = opportunity.customer_id; if (product) product.value = opportunity.product_name; }} className="field mt-2"><option value="">Sem associação (legado)</option>{opportunities.map((opportunity) => <option key={opportunity.id} value={opportunity.id}>{opportunity.customer_name} · {opportunity.product_name}</option>)}</select></label>
         <label className="text-sm font-medium">Cliente<select name="customer_id" required disabled={Boolean(reminder)} defaultValue={reminder?.customer_id ?? ""} className="field mt-2 disabled:opacity-60"><option value="" disabled>Selecione</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
         <label className="text-sm font-medium">Modelo<select name="message_template_id" required defaultValue={reminder?.message_template_id ?? ""} className="field mt-2"><option value="" disabled>Selecione</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>
         <label className="text-sm font-medium">Produto de interesse<input name="product_interest" required maxLength={200} defaultValue={reminder?.product_interest ?? ""} className="field mt-2" /></label>

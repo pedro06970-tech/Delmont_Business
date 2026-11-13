@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -23,6 +24,7 @@ class Customer(Base):
     __tablename__ = "customers"
     __table_args__ = (
         UniqueConstraint("store_id", "phone_e164", name="uq_customer_store_phone"),
+        UniqueConstraint("id", "store_id", name="uq_customers_id_store"),
         Index("ix_customers_store_name", "store_id", "name"),
     )
 
@@ -129,6 +131,7 @@ class Reminder(Base):
             "next_attempt_at",
             "scheduled_for",
         ),
+        Index("ix_reminders_opportunity", "opportunity_id"),
         Index(
             "uq_pending_reminder_identity",
             "store_id",
@@ -138,6 +141,12 @@ class Reminder(Base):
             "scheduled_for",
             unique=True,
             postgresql_where=text("status = 'pending'"),
+        ),
+        ForeignKeyConstraint(
+            ["opportunity_id", "store_id", "customer_id"],
+            ["sales_opportunities.id", "sales_opportunities.store_id", "sales_opportunities.customer_id"],
+            name="fk_reminder_opportunity_scope",
+            ondelete="RESTRICT",
         ),
     )
 
@@ -150,6 +159,7 @@ class Reminder(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False
     )
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     message_template_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("message_templates.id", ondelete="RESTRICT"), nullable=False
     )
@@ -186,6 +196,92 @@ class Reminder(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class SalesOpportunity(Base):
+    __tablename__ = "sales_opportunities"
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'won', 'lost')", name="ck_sales_opportunity_status"),
+        ForeignKeyConstraint(
+            ["customer_id", "store_id"],
+            ["customers.id", "customers.store_id"],
+            name="fk_sales_opportunity_customer_store",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "store_id", "customer_id", name="uq_sales_opportunity_identity"),
+        Index(
+            "uq_open_sales_opportunity",
+            "store_id",
+            "customer_id",
+            "product_key",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_sales_opportunities_store_status_created", "store_id", "status", "created_at"),
+        Index("ix_sales_opportunities_store_closed", "store_id", "closed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    store_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    product_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    product_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    lost_reason: Mapped[str | None] = mapped_column(String(500))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    customer = relationship("Customer")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    closed_by = relationship("User", foreign_keys=[closed_by_user_id])
+    events = relationship(
+        "SalesOpportunityEvent",
+        back_populates="opportunity",
+        cascade="all, delete-orphan",
+        order_by="SalesOpportunityEvent.occurred_at",
+    )
+
+
+class SalesOpportunityEvent(Base):
+    __tablename__ = "sales_opportunity_events"
+    __table_args__ = (
+        CheckConstraint(
+            "previous_status IS NULL OR previous_status IN ('open', 'won', 'lost')",
+            name="ck_sales_opportunity_event_previous_status",
+        ),
+        CheckConstraint("new_status IN ('open', 'won', 'lost')", name="ck_sales_opportunity_event_new_status"),
+        Index("ix_sales_opportunity_events_opportunity_time", "opportunity_id", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sales_opportunities.id", ondelete="CASCADE"), nullable=False
+    )
+    previous_status: Mapped[str | None] = mapped_column(String(16))
+    new_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    performed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    lost_reason: Mapped[str | None] = mapped_column(String(500))
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    opportunity = relationship("SalesOpportunity", back_populates="events")
+    performed_by = relationship("User")
 
 
 class WhatsMiauConfiguration(Base):

@@ -8,6 +8,8 @@ from app.models.commercial import (
     MessageTemplate,
     Reminder,
     ReminderDeliveryAttempt,
+    SalesOpportunity,
+    SalesOpportunityEvent,
     WhatsMiauConfiguration,
 )
 from app.models.store import Store, UserStore
@@ -21,6 +23,8 @@ __all__ = [
     "MessageTemplate",
     "Reminder",
     "ReminderDeliveryAttempt",
+    "SalesOpportunity",
+    "SalesOpportunityEvent",
     "Store",
     "User",
     "UserRole",

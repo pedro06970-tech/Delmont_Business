@@ -71,6 +71,7 @@ export type Reminder = {
   id: string;
   store_id: string;
   customer_id: string;
+  opportunity_id: string | null;
   message_template_id: string;
   product_interest: string;
   scheduled_for: string;
@@ -149,6 +150,77 @@ export type ReminderPage = {
   page: number;
   page_size: number;
   pages: number;
+};
+
+export type OpportunityStatus = "open" | "won" | "lost";
+
+export type SalesOpportunityEvent = {
+  id: string;
+  previous_status: OpportunityStatus | null;
+  new_status: OpportunityStatus;
+  performed_by_user_id: string;
+  performed_by_name: string;
+  lost_reason: string | null;
+  occurred_at: string;
+};
+
+export type SalesOpportunity = {
+  id: string;
+  store_id: string;
+  customer_id: string;
+  customer_name: string;
+  product_name: string;
+  status: OpportunityStatus;
+  created_by_user_id: string;
+  created_by_name: string;
+  closed_by_user_id: string | null;
+  closed_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  lost_reason: string | null;
+  reminder_count: number;
+};
+
+export type SalesOpportunityDetail = SalesOpportunity & {
+  events: SalesOpportunityEvent[];
+};
+
+export type SalesOpportunityPage = {
+  items: SalesOpportunity[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+};
+
+export type CommercialDashboard = {
+  period: {
+    timezone: string;
+    date_from: string;
+    date_to: string;
+    start_utc: string;
+    end_utc_exclusive: string;
+  };
+  metrics: {
+    distinct_leads: number;
+    open_opportunities: number;
+    scheduled_reminders: number;
+    accepted_messages: number;
+    won_opportunities: number;
+    lost_opportunities: number;
+    conversion_rate: number;
+    conversion_has_basis: boolean;
+    conversion_definition: string;
+  };
+  reminder_evolution: { date: string; reminders: number }[];
+  collaborator_performance: {
+    user_id: string;
+    user_name: string;
+    opportunities_created: number;
+    opportunities_won: number;
+    reminders_created: number;
+  }[];
 };
 
 function csrfToken(): string | undefined {

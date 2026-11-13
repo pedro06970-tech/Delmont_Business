@@ -17,6 +17,7 @@ class ReminderCreate(BaseModel):
 
     store_id: uuid.UUID
     customer_id: uuid.UUID
+    opportunity_id: uuid.UUID | None = None
     message_template_id: uuid.UUID
     product_interest: str = Field(min_length=1, max_length=200)
     scheduled_for: datetime
@@ -33,6 +34,7 @@ class ReminderUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message_template_id: uuid.UUID | None = None
+    opportunity_id: uuid.UUID | None = None
     product_interest: str | None = Field(default=None, min_length=1, max_length=200)
     scheduled_for: datetime | None = None
 
@@ -59,6 +61,7 @@ class ReminderResponse(BaseModel):
     id: uuid.UUID
     store_id: uuid.UUID
     customer_id: uuid.UUID
+    opportunity_id: uuid.UUID | None
     message_template_id: uuid.UUID
     product_interest: str
     scheduled_for: datetime
